@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Obscene SSH-based VPN for poors ;)
+# SSH-based VPN for poors ;)
 #
 set -eo pipefail
 
@@ -11,10 +11,10 @@ function print_help() {
   echo "Usage: ${0} [OPTIONS] [SSH_USER@]SSH_SERVER [NETWORK1, NETWORK2, ... NETWORKx]"
   echo
   echo "OPTIONS"
+  echo "-p SSH_PORT            use non-default SSH port"
   echo "-k PRIVATE_KEY_PATH    use specific SSH private key"
   echo "-f MAX_FAILED_PINGS    fail connection after X ping failures"
   echo
-  echo "-C    do not check if we run outdated app version"
   echo "-D    do not fetch DNS config from server"
   echo "-X    do not run route discovery"
   echo "-c    use route cache instead of route discovery"
@@ -41,8 +41,20 @@ if [[ ${#} -lt 1 ]]; then
   exit 1
 fi
 
-while getopts "k:f:CRDXch" o; do
+while getopts "p:k:f:DXch" o; do
   case ${o} in
+    p)
+      SSH_PORT=${OPTARG}
+      if [[ ! ${SSH_PORT} =~ ^[0-9]+$ ]]; then
+        echo "SSH port should be a number, while this is not: ${SSH_PORT}"
+        exit 1
+      fi
+      if [[ ${SSH_PORT} -lt 1 || ${SSH_PORT} -gt 65535 ]]; then
+        echo "Invalid port number: ${SSH_PORT} (should be between 1 and 65535)"
+        exit 1
+      fi
+      SSH_PORT_OPTS="-oPort=${SSH_PORT}"
+      ;;
     k)
       PRIVATE_KEY_PATH=${OPTARG}
       if [[ ! -f "${PRIVATE_KEY_PATH}" ]]; then
@@ -63,9 +75,6 @@ while getopts "k:f:CRDXch" o; do
         exit 1
       fi
       ;;
-    C)
-      DONT_CHECK_IF_OUTDATED=true
-      ;;
     D)
       NO_DNS=true
       ;;
@@ -84,10 +93,6 @@ while getopts "k:f:CRDXch" o; do
       exit 1
   esac
 done
-
-if [[ ! ${DONT_CHECK_IF_OUTDATED} ]]; then
-  ./scripts/client-check-if-outdated.sh 2>/dev/null &
-fi
 
 declare -r MAX_FAILED_PINGS=${MAX_FAILED_PINGS-10}
 
@@ -127,7 +132,7 @@ fi
 declare -r TUNNEL_ID=$(cat ${TUNNEL_ID_FILE})
 declare -r REMOTE_PATH="/tmp/xiringuito.${TUNNEL_ID}"
 
-declare -r SSH_OPTS="-oLogLevel=${SSH_LOG_LEVEL:-ERROR} -oConnectionAttempts=3 -oConnectTimeout=5 ${SSH_PRIVATE_KEY_OPTS} ${SSH_EXTRA_OPTS}"
+declare -r SSH_OPTS="-oLogLevel=${SSH_LOG_LEVEL:-ERROR} -oConnectionAttempts=3 -oConnectTimeout=5 ${SSH_PRIVATE_KEY_OPTS} ${SSH_PORT_OPTS} ${SSH_EXTRA_OPTS}"
 
 if [[ ${KERNEL} == linux ]]; then
   declare -r LOCAL_TUNNEL_ID=${TUNNEL_ID}
